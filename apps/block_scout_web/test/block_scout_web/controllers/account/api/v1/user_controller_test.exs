@@ -156,7 +156,8 @@ defmodule BlockScoutWeb.Account.Api.V1.UserControllerTest do
                "name" => nil,
                "private_tags" => [],
                "public_tags" => [],
-               "watchlist_names" => []
+               "watchlist_names" => [],
+               "ens_domain_name" => nil
              }
            }}
         end)
@@ -207,7 +208,8 @@ defmodule BlockScoutWeb.Account.Api.V1.UserControllerTest do
                "name" => nil,
                "private_tags" => [],
                "public_tags" => [],
-               "watchlist_names" => []
+               "watchlist_names" => [],
+               "ens_domain_name" => nil
              }
            }}
         end)
@@ -1216,6 +1218,10 @@ defmodule BlockScoutWeb.Account.Api.V1.UserControllerTest do
       "ERC-721" => %{
         "incoming" => watchlist.watch_erc_721_input,
         "outcoming" => watchlist.watch_erc_721_output
+      },
+      "ERC-404" => %{
+        "incoming" => watchlist.watch_erc_404_input,
+        "outcoming" => watchlist.watch_erc_404_output
       }
     }
 

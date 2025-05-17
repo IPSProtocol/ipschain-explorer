@@ -21,7 +21,9 @@ defmodule Explorer.Factory do
   }
 
   alias Explorer.Admin.Administrator
+  alias Explorer.Chain.Beacon.{Blob, BlobTransaction}
   alias Explorer.Chain.Block.{EmissionReward, Range, Reward}
+  alias Explorer.Chain.Stability.Validator, as: ValidatorStability
 
   alias Explorer.Chain.{
     Address,
@@ -38,12 +40,15 @@ defmodule Explorer.Factory do
     Log,
     PendingBlockOperation,
     SmartContract,
+    SmartContractAdditionalSource,
     Token,
     TokenTransfer,
     Token.Instance,
     Transaction,
     Withdrawal
   }
+
+  alias Explorer.Chain.Optimism.OutputRoot
 
   alias Explorer.SmartContract.Helper
   alias Explorer.Tags.{AddressTag, AddressToTag}
@@ -101,6 +106,10 @@ defmodule Explorer.Factory do
         "ERC-721" => %{
           "incoming" => random_bool(),
           "outcoming" => random_bool()
+        },
+        "ERC-404" => %{
+          "incoming" => random_bool(),
+          "outcoming" => random_bool()
         }
       },
       "notification_methods" => %{
@@ -125,6 +134,8 @@ defmodule Explorer.Factory do
       watch_erc_721_output: random_bool(),
       watch_erc_1155_input: random_bool(),
       watch_erc_1155_output: random_bool(),
+      watch_erc_404_input: random_bool(),
+      watch_erc_404_output: random_bool(),
       notify_email: random_bool()
     }
   end
@@ -200,6 +211,8 @@ defmodule Explorer.Factory do
       watch_erc_721_output: random_bool(),
       watch_erc_1155_input: random_bool(),
       watch_erc_1155_output: random_bool(),
+      watch_erc_404_input: random_bool(),
+      watch_erc_404_output: random_bool(),
       notify_email: random_bool()
     }
   end
@@ -533,7 +546,7 @@ defmodule Explorer.Factory do
         %Transaction{index: nil} = transaction,
         # The `transaction.block` must be consensus.  Non-consensus blocks can only be associated with the
         # `transaction_forks`.
-        %Block{consensus: true, hash: block_hash, number: block_number},
+        %Block{consensus: true, hash: block_hash, number: block_number, timestamp: timestamp},
         collated_params
       )
       when is_list(collated_params) do
@@ -542,6 +555,8 @@ defmodule Explorer.Factory do
     cumulative_gas_used = collated_params[:cumulative_gas_used] || Enum.random(21_000..100_000)
     gas_used = collated_params[:gas_used] || Enum.random(21_000..100_000)
     status = Keyword.get(collated_params, :status, Enum.random([:ok, :error]))
+    block_timestamp = Keyword.get(collated_params, :block_timestamp, timestamp)
+    block_consensus = Keyword.get(collated_params, :block_consensus, true)
 
     error = (status == :error && collated_params[:error]) || nil
 
@@ -555,7 +570,9 @@ defmodule Explorer.Factory do
       error: error,
       gas_used: gas_used,
       index: next_transaction_index,
-      status: status
+      status: status,
+      block_timestamp: block_timestamp,
+      block_consensus: block_consensus
     })
     |> Repo.update!()
     |> Repo.preload(:block)
@@ -675,8 +692,7 @@ defmodule Explorer.Factory do
       index: sequence("log_index", & &1),
       second_topic: nil,
       third_topic: nil,
-      transaction: build(:transaction),
-      type: sequence("0x")
+      transaction: build(:transaction)
     }
   end
 
@@ -691,7 +707,7 @@ defmodule Explorer.Factory do
       cataloged: true,
       icon_url: sequence("https://example.com/icon"),
       fiat_value: 10.1,
-      is_verified_via_admin_panel: Enum.random([true, false])
+      is_verified_via_admin_panel: false
     }
   end
 
@@ -743,7 +759,7 @@ defmodule Explorer.Factory do
     contract_code = Map.fetch!(contract_code_info(), :bytecode)
 
     token_address = insert(:contract_address, contract_code: contract_code)
-    insert(:token, contract_address: token_address)
+    token = insert(:token, contract_address: token_address)
 
     %TokenTransfer{
       block: build(:block),
@@ -752,8 +768,10 @@ defmodule Explorer.Factory do
       from_address: from_address,
       to_address: to_address,
       token_contract_address: token_address,
+      token_type: token.type,
       transaction: log.transaction,
-      log_index: log.index
+      log_index: log.index,
+      block_consensus: true
     }
   end
 
@@ -807,7 +825,8 @@ defmodule Explorer.Factory do
       s: sequence(:transaction_s, & &1),
       to_address: build(:address),
       v: Enum.random(27..30),
-      value: Enum.random(1..100_000)
+      value: Enum.random(1..100_000),
+      block_timestamp: DateTime.utc_now()
     }
   end
 
@@ -868,6 +887,10 @@ defmodule Explorer.Factory do
       is_vyper_contract: Enum.random([true, false]),
       verified_via_eth_bytecode_db: Enum.random([true, false])
     }
+  end
+
+  def smart_contract_additional_source_factory do
+    %SmartContractAdditionalSource{}
   end
 
   def unique_smart_contract_factory do
@@ -936,7 +959,14 @@ defmodule Explorer.Factory do
   end
 
   def address_current_token_balance_with_token_id_factory do
-    {token_type, token_id} = Enum.random([{"ERC-20", nil}, {"ERC-721", nil}, {"ERC-1155", Enum.random(1..100_000)}])
+    {token_type, token_id} =
+      Enum.random([
+        {"ERC-20", nil},
+        {"ERC-721", nil},
+        {"ERC-1155", Enum.random(1..100_000)},
+        {"ERC-404", nil},
+        {"ERC-404", Enum.random(1..100_000)}
+      ])
 
     %CurrentTokenBalance{
       address: build(:address),
@@ -1082,5 +1112,63 @@ defmodule Explorer.Factory do
     sequence("withdrawal_validator_index", & &1)
   end
 
+  def blob_factory do
+    kzg_commitment = data(:kzg_commitment)
+
+    %Blob{
+      hash: Blob.hash(kzg_commitment.bytes),
+      blob_data: data(:blob_data),
+      kzg_commitment: kzg_commitment,
+      kzg_proof: data(:kzg_proof)
+    }
+  end
+
+  def blob_transaction_factory do
+    %BlobTransaction{
+      hash: insert(:transaction) |> with_block() |> Map.get(:hash),
+      max_fee_per_blob_gas: Decimal.new(1_000_000_000),
+      blob_gas_price: Decimal.new(1_000_000_000),
+      blob_gas_used: Decimal.new(131_072),
+      blob_versioned_hashes: []
+    }
+  end
+
+  def op_output_root_factory do
+    %OutputRoot{
+      l2_output_index: op_output_root_l2_output_index(),
+      l2_block_number: insert(:block) |> Map.get(:number),
+      l1_transaction_hash: transaction_hash(),
+      l1_timestamp: DateTime.utc_now(),
+      l1_block_number: op_output_root_l1_block_number(),
+      output_root: op_output_root_hash()
+    }
+  end
+
+  defp op_output_root_l2_output_index do
+    sequence("op_output_root_l2_output_index", & &1)
+  end
+
+  defp op_output_root_l1_block_number do
+    sequence("op_output_root_l1_block_number", & &1)
+  end
+
+  defp op_output_root_hash do
+    {:ok, hash} =
+      "op_output_root_hash"
+      |> sequence(& &1)
+      |> Hash.Full.cast()
+
+    hash
+  end
+
   def random_bool, do: Enum.random([true, false])
+
+  def validator_stability_factory do
+    address = insert(:address)
+
+    %ValidatorStability{
+      address_hash: address.hash,
+      state: Enum.random(0..2)
+    }
+  end
 end

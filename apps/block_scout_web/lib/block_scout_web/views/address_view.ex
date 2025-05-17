@@ -256,12 +256,12 @@ defmodule BlockScoutWeb.AddressView do
   def smart_contract_verified?(%Address{smart_contract: nil}), do: false
 
   def smart_contract_with_read_only_functions?(%Address{smart_contract: %SmartContract{}} = address) do
-    Enum.any?(address.smart_contract.abi || [], &is_read_function?(&1))
+    Enum.any?(address.smart_contract.abi || [], &read_function?(&1))
   end
 
   def smart_contract_with_read_only_functions?(%Address{smart_contract: _}), do: false
 
-  def is_read_function?(function), do: Helper.queriable_method?(function) || Helper.read_with_wallet_method?(function)
+  def read_function?(function), do: Helper.queriable_method?(function) || Helper.read_with_wallet_method?(function)
 
   def smart_contract_is_proxy?(address, options \\ [])
 
@@ -480,7 +480,7 @@ defmodule BlockScoutWeb.AddressView do
   end
 
   def check_custom_abi_for_having_read_functions(custom_abi),
-    do: !is_nil(custom_abi) && Enum.any?(custom_abi.abi, &is_read_function?(&1))
+    do: !is_nil(custom_abi) && Enum.any?(custom_abi.abi, &read_function?(&1))
 
   def has_address_custom_abi_with_write_functions?(conn, address_hash) do
     if contract_interaction_disabled?() do
@@ -497,6 +497,14 @@ defmodule BlockScoutWeb.AddressView do
 
   def contract_interaction_disabled?, do: Application.get_env(:block_scout_web, :contract)[:disable_interaction]
 
+  @doc """
+    Decodes given log
+  """
+  @spec decode(Log.t(), Transaction.t()) ::
+          {:ok, String.t(), String.t(), map()}
+          | {:error, atom()}
+          | {:error, atom(), list()}
+          | {{:error, :contract_not_verified, list()}, any()}
   def decode(log, transaction) do
     {result, _contracts_acc, _events_acc} = Log.decode(log, transaction, [], true)
     result

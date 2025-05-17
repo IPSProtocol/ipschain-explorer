@@ -15,8 +15,13 @@ defmodule Explorer.Chain.SmartContractTest do
     test "check proxy_contract/1 function" do
       smart_contract = insert(:smart_contract)
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, :timer.seconds(20))
-      Application.put_env(:explorer, :implementation_data_fetching_timeout, :timer.seconds(20))
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, :timer.seconds(20))
+        |> Keyword.replace(:implementation_data_fetching_timeout, :timer.seconds(20))
+
+      Application.put_env(:explorer, :proxy, proxy)
 
       refute smart_contract.implementation_fetched_at
 
@@ -26,7 +31,12 @@ defmodule Explorer.Chain.SmartContractTest do
       verify!(EthereumJSONRPC.Mox)
       assert_implementation_never_fetched(smart_contract.address_hash)
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, 0)
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, 0)
+
+      Application.put_env(:explorer, :proxy, proxy)
 
       get_eip1967_implementation_error_response()
       refute Proxy.proxy_contract?(smart_contract)
@@ -42,10 +52,22 @@ defmodule Explorer.Chain.SmartContractTest do
       verify!(EthereumJSONRPC.Mox)
       assert_implementation_address(smart_contract.address_hash)
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, :timer.seconds(20))
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, :timer.seconds(20))
+
+      Application.put_env(:explorer, :proxy, proxy)
+
       assert Proxy.proxy_contract?(smart_contract)
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, 0)
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, 0)
+
+      Application.put_env(:explorer, :proxy, proxy)
+
       get_eip1967_implementation_non_zero_address()
       assert Proxy.proxy_contract?(smart_contract)
       verify!(EthereumJSONRPC.Mox)
@@ -59,8 +81,13 @@ defmodule Explorer.Chain.SmartContractTest do
       smart_contract = insert(:smart_contract)
       implementation_smart_contract = insert(:smart_contract, name: "proxy")
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, :timer.seconds(20))
-      Application.put_env(:explorer, :implementation_data_fetching_timeout, :timer.seconds(20))
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, :timer.seconds(20))
+        |> Keyword.replace(:implementation_data_fetching_timeout, :timer.seconds(20))
+
+      Application.put_env(:explorer, :proxy, proxy)
 
       refute smart_contract.implementation_fetched_at
 
@@ -71,34 +98,17 @@ defmodule Explorer.Chain.SmartContractTest do
       assert_implementation_never_fetched(smart_contract.address_hash)
 
       # extract proxy info from db
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, 0)
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, 0)
+
+      Application.put_env(:explorer, :proxy, proxy)
 
       string_implementation_address_hash = to_string(implementation_smart_contract.address_hash)
 
-      expect(EthereumJSONRPC.Mox, :json_rpc, fn %{
-                                                  id: 0,
-                                                  method: "eth_getStorageAt",
-                                                  params: [
-                                                    _,
-                                                    "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
-                                                    "latest"
-                                                  ]
-                                                },
-                                                _options ->
-        {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-      end)
-      |> expect(:json_rpc, fn %{
-                                id: 0,
-                                method: "eth_getStorageAt",
-                                params: [
-                                  _,
-                                  "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
-                                  "latest"
-                                ]
-                              },
-                              _options ->
-        {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-      end)
+      mock_empty_logic_storage_pointer_request()
+      |> mock_empty_beacon_storage_pointer_request()
       |> expect(:json_rpc, fn %{
                                 id: 0,
                                 method: "eth_getStorageAt",
@@ -138,7 +148,12 @@ defmodule Explorer.Chain.SmartContractTest do
 
       contract_1 = SmartContract.address_hash_to_smart_contract(smart_contract.address_hash)
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, :timer.seconds(20))
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, :timer.seconds(20))
+
+      Application.put_env(:explorer, :proxy, proxy)
 
       assert {^string_implementation_address_hash, "proxy"} =
                SmartContract.get_implementation_address_hash(smart_contract)
@@ -148,7 +163,12 @@ defmodule Explorer.Chain.SmartContractTest do
       assert contract_1.implementation_fetched_at == contract_2.implementation_fetched_at &&
                contract_1.updated_at == contract_2.updated_at
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, 0)
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, 0)
+
+      Application.put_env(:explorer, :proxy, proxy)
       get_eip1967_implementation_zero_addresses()
 
       assert {^string_implementation_address_hash, "proxy"} =
@@ -169,8 +189,13 @@ defmodule Explorer.Chain.SmartContractTest do
       twin = SmartContract.address_hash_to_smart_contract(another_address.hash)
       implementation_smart_contract = insert(:smart_contract, name: "proxy")
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, :timer.seconds(20))
-      Application.put_env(:explorer, :implementation_data_fetching_timeout, :timer.seconds(20))
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, :timer.seconds(20))
+        |> Keyword.replace(:implementation_data_fetching_timeout, :timer.seconds(20))
+
+      Application.put_env(:explorer, :proxy, proxy)
 
       # fetch nil implementation
       get_eip1967_implementation_zero_addresses()
@@ -206,8 +231,13 @@ defmodule Explorer.Chain.SmartContractTest do
 
       implementation_smart_contract = insert(:smart_contract, name: "proxy")
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, :timer.seconds(20))
-      Application.put_env(:explorer, :implementation_data_fetching_timeout, :timer.seconds(20))
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, :timer.seconds(20))
+        |> Keyword.replace(:implementation_data_fetching_timeout, :timer.seconds(20))
+
+      Application.put_env(:explorer, :proxy, proxy)
 
       # fetch nil implementation
       get_eip1967_implementation_zero_addresses()
@@ -253,8 +283,13 @@ defmodule Explorer.Chain.SmartContractTest do
 
       implementation_smart_contract = insert(:smart_contract, name: "proxy")
 
-      Application.put_env(:explorer, :fallback_ttl_cached_implementation_data_of_proxy, :timer.seconds(20))
-      Application.put_env(:explorer, :implementation_data_fetching_timeout, :timer.seconds(20))
+      proxy =
+        :explorer
+        |> Application.get_env(:proxy)
+        |> Keyword.replace(:fallback_cached_implementation_data_ttl, :timer.seconds(20))
+        |> Keyword.replace(:implementation_data_fetching_timeout, :timer.seconds(20))
+
+      Application.put_env(:explorer, :proxy, proxy)
 
       # fetch nil implementation
       get_eip1967_implementation_zero_addresses()
@@ -287,91 +322,16 @@ defmodule Explorer.Chain.SmartContractTest do
     end
   end
 
-  describe "address_hash_to_smart_contract/1" do
-    test "fetches a smart contract" do
-      smart_contract = insert(:smart_contract, contract_code_md5: "123")
-
-      assert ^smart_contract = SmartContract.address_hash_to_smart_contract(smart_contract.address_hash)
-    end
-  end
-
   def get_eip1967_implementation_zero_addresses do
-    EthereumJSONRPC.Mox
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0xc5f16f0fcc639fa48a6947836d9850f504798523bf8c9a3a87d5876cf622bcf7",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
+    mock_empty_logic_storage_pointer_request()
+    |> mock_empty_beacon_storage_pointer_request()
+    |> mock_empty_oz_storage_pointer_request()
+    |> mock_empty_eip_1822_storage_pointer_request()
   end
 
   def get_eip1967_implementation_non_zero_address do
-    expect(EthereumJSONRPC.Mox, :json_rpc, fn %{
-                                                id: 0,
-                                                method: "eth_getStorageAt",
-                                                params: [
-                                                  _,
-                                                  "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
-                                                  "latest"
-                                                ]
-                                              },
-                                              _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
+    mock_empty_logic_storage_pointer_request()
+    |> mock_empty_beacon_storage_pointer_request()
     |> expect(:json_rpc, fn %{
                               id: 0,
                               method: "eth_getStorageAt",
@@ -400,42 +360,9 @@ defmodule Explorer.Chain.SmartContractTest do
                             _options ->
       {:error, "error"}
     end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0xc5f16f0fcc639fa48a6947836d9850f504798523bf8c9a3a87d5876cf622bcf7",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
-    end)
+    |> mock_empty_beacon_storage_pointer_request()
+    |> mock_empty_oz_storage_pointer_request()
+    |> mock_empty_eip_1822_storage_pointer_request()
   end
 
   def assert_empty_implementation(address_hash) do
@@ -711,9 +638,10 @@ defmodule Explorer.Chain.SmartContractTest do
       secondary_sources: secondary_sources,
       changed_sources: changed_sources
     } do
-      sc_before_call = Repo.get_by(Address, hash: address.hash) |> Repo.preload(:smart_contract_additional_sources)
+      sc_before_call =
+        Repo.get_by(Address, hash: address.hash) |> Repo.preload(smart_contract: :smart_contract_additional_sources)
 
-      assert sc_before_call.smart_contract_additional_sources
+      assert sc_before_call.smart_contract.smart_contract_additional_sources
              |> Enum.with_index()
              |> Enum.all?(fn {el, ind} ->
                {:ok, src} = Enum.fetch(secondary_sources, ind)
@@ -725,9 +653,10 @@ defmodule Explorer.Chain.SmartContractTest do
       assert {:ok, %SmartContract{}} =
                SmartContract.update_smart_contract(%{address_hash: address.hash}, [], changed_sources)
 
-      sc_after_call = Repo.get_by(Address, hash: address.hash) |> Repo.preload(:smart_contract_additional_sources)
+      sc_after_call =
+        Repo.get_by(Address, hash: address.hash) |> Repo.preload(smart_contract: :smart_contract_additional_sources)
 
-      assert sc_after_call.smart_contract_additional_sources
+      assert sc_after_call.smart_contract.smart_contract_additional_sources
              |> Enum.with_index()
              |> Enum.all?(fn {el, ind} ->
                {:ok, src} = Enum.fetch(changed_sources, ind)
@@ -893,6 +822,23 @@ defmodule Explorer.Chain.SmartContractTest do
   end
 
   defp expect_address_in_response(string_implementation_address_hash) do
+    mock_empty_logic_storage_pointer_request()
+    |> mock_empty_beacon_storage_pointer_request()
+    |> expect(:json_rpc, fn %{
+                              id: 0,
+                              method: "eth_getStorageAt",
+                              params: [
+                                _,
+                                "0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3",
+                                "latest"
+                              ]
+                            },
+                            _options ->
+      {:ok, string_implementation_address_hash}
+    end)
+  end
+
+  defp mock_empty_logic_storage_pointer_request do
     expect(EthereumJSONRPC.Mox, :json_rpc, fn %{
                                                 id: 0,
                                                 method: "eth_getStorageAt",
@@ -905,29 +851,50 @@ defmodule Explorer.Chain.SmartContractTest do
                                               _options ->
       {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
     end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
-                                "latest"
-                              ]
-                            },
-                            _options ->
+  end
+
+  defp mock_empty_beacon_storage_pointer_request(mox) do
+    expect(mox, :json_rpc, fn %{
+                                id: 0,
+                                method: "eth_getStorageAt",
+                                params: [
+                                  _,
+                                  "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+                                  "latest"
+                                ]
+                              },
+                              _options ->
       {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
     end)
-    |> expect(:json_rpc, fn %{
-                              id: 0,
-                              method: "eth_getStorageAt",
-                              params: [
-                                _,
-                                "0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3",
-                                "latest"
-                              ]
-                            },
-                            _options ->
-      {:ok, string_implementation_address_hash}
+  end
+
+  defp mock_empty_eip_1822_storage_pointer_request(mox) do
+    expect(mox, :json_rpc, fn %{
+                                id: 0,
+                                method: "eth_getStorageAt",
+                                params: [
+                                  _,
+                                  "0xc5f16f0fcc639fa48a6947836d9850f504798523bf8c9a3a87d5876cf622bcf7",
+                                  "latest"
+                                ]
+                              },
+                              _options ->
+      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
+    end)
+  end
+
+  defp mock_empty_oz_storage_pointer_request(mox) do
+    expect(mox, :json_rpc, fn %{
+                                id: 0,
+                                method: "eth_getStorageAt",
+                                params: [
+                                  _,
+                                  "0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3",
+                                  "latest"
+                                ]
+                              },
+                              _options ->
+      {:ok, "0x0000000000000000000000000000000000000000000000000000000000000000"}
     end)
   end
 end

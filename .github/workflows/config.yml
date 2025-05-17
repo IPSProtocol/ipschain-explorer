@@ -4,21 +4,21 @@ on:
   push:
     branches:
       - master
-      - production-core-stg
-      - production-eth-stg-experimental
-      - production-eth-goerli-stg
-      - production-eth-sepolia-stg
-      - production-fuse-stg
-      - production-optimism-stg
-      - production-immutable-stg
-      - production-iota-stg
-      - production-lukso-stg
-      - production-rsk-stg
-      - production-sokol-stg
-      - production-suave-stg
-      - production-xdai-stg
-      - production-zkevm-stg
-      - production-zksync-stg
+      - production-core
+      - production-eth-experimental
+      - production-eth-goerli
+      - production-eth-sepolia
+      - production-fuse
+      - production-optimism
+      - production-immutable
+      - production-iota
+      - production-lukso
+      - production-rsk
+      - production-sokol
+      - production-suave
+      - production-xdai
+      - production-zkevm
+      - production-zksync
       - staging-l2
     paths-ignore:
       - 'CHANGELOG.md'
@@ -28,12 +28,13 @@ on:
   pull_request:
     branches:
       - master
-      - production-optimism-stg
+      - production-optimism
+      - production-zksync
 
 env:
   MIX_ENV: test
-  OTP_VERSION: "25.2.1"
-  ELIXIR_VERSION: "1.14.5"
+  OTP_VERSION: ${{ vars.OTP_VERSION || '25.3.2.8' }}
+  ELIXIR_VERSION: ${{ vars.ELIXIR_VERSION || '1.14.5' }}
   ACCOUNT_AUTH0_DOMAIN: "blockscoutcom.us.auth0.com"
 
 jobs:
@@ -47,7 +48,7 @@ jobs:
         run: |
           echo "matrix=$matrixStringifiedObject" >> $GITHUB_OUTPUT
         env:
-          matrixStringifiedObject: '{"chain-type": ["ethereum", "polygon_edge", "polygon_zkevm", "rsk", "suave", "stability"]}'
+          matrixStringifiedObject: '{"chain-type": ["ethereum", "polygon_edge", "polygon_zkevm", "rsk", "suave", "stability", "filecoin", "optimism"]}'
 
   build-and-cache:
     name: Build and Cache deps
@@ -58,6 +59,9 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: "ELIXIR_VERSION.lock"
         run: echo "${ELIXIR_VERSION}" > ELIXIR_VERSION.lock
@@ -66,15 +70,15 @@ jobs:
         run: echo "${OTP_VERSION}" > OTP_VERSION.lock
 
       - name: Restore Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - name: Conditionally build Mix deps cache
         if: steps.deps-cache.outputs.cache-hit != 'true'
@@ -82,10 +86,10 @@ jobs:
           mix local.hex --force
           mix local.rebar --force
           mix deps.get
-          mix deps.compile
+          mix deps.compile --skip-umbrella-children
 
       - name: Restore Explorer NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
@@ -99,7 +103,7 @@ jobs:
         working-directory: apps/explorer
 
       - name: Restore Blockscout Web NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
@@ -122,17 +126,20 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Restore Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - run: mix credo
 
@@ -146,17 +153,20 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Restore Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - run: mix format --check-formatted
 
@@ -175,26 +185,29 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Restore Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - name: Restore Dialyzer Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: dialyzer-cache
         with:
           path: priv/plts
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-${{ matrix.chain-type }}-dialyzer-mixlockhash_25-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-${{ matrix.chain-type }}-dialyzer-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-${{ matrix.chain-type }}-dialyzer-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-${{ matrix.chain-type }}-dialyzer-mixlockhash-
 
       - name: Conditionally build Dialyzer Cache
         if: steps.dialyzer-cache.output.cache-hit != 'true'
@@ -219,17 +232,20 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Restore Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - run: |
           mix gettext.extract --merge | tee stdout.txt
@@ -245,17 +261,20 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - name: Scan explorer for vulnerabilities
         run: mix sobelow --config
@@ -274,20 +293,23 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - name: Restore Explorer NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
@@ -296,7 +318,7 @@ jobs:
             ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-
 
       - name: Restore Blockscout Web NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
@@ -322,20 +344,23 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - name: Restore Explorer NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
@@ -344,7 +369,7 @@ jobs:
             ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-
 
       - name: Restore Blockscout Web NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
@@ -368,20 +393,23 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - name: Restore Blockscout Web NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
@@ -407,7 +435,7 @@ jobs:
       - matrix-builder
     services:
       postgres:
-        image: postgres
+        image: postgres:15
         env:
           # Match apps/explorer/config/test.exs config :explorer, Explorer.Repo, database
           POSTGRES_DB: explorer_test
@@ -430,17 +458,20 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - run: ./bin/install_chrome_headless.sh
       - name: mix test --exclude no_nethermind
@@ -467,7 +498,7 @@ jobs:
       - matrix-builder
     services:
       postgres:
-        image: postgres
+        image: postgres:15
         env:
           # Match apps/explorer/config/test.exs config :explorer, Explorer.Repo, database
           POSTGRES_DB: explorer_test
@@ -490,20 +521,23 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - name: Restore Explorer NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
@@ -538,7 +572,7 @@ jobs:
       - matrix-builder
     services:
       postgres:
-        image: postgres
+        image: postgres:15
         env:
           # Match apps/explorer/config/test.exs config :explorer, Explorer.Repo, database
           POSTGRES_DB: explorer_test
@@ -561,17 +595,20 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - run: ./bin/install_chrome_headless.sh
 
@@ -600,13 +637,13 @@ jobs:
       - build-and-cache
       - matrix-builder
     services:
-      redis_db:
+      redis-db:
         image: "redis:alpine"
         ports:
           - 6379:6379
 
       postgres:
-        image: postgres
+        image: postgres:15
         env:
           # Match apps/explorer/config/test.exs config :explorer, Explorer.Repo, database
           POSTGRES_DB: explorer_test
@@ -629,20 +666,23 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Mix Deps Cache
-        uses: actions/cache@v2
+        uses: actions/cache/restore@v4
         id: deps-cache
         with:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash_27-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-"
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-deps-mixlockhash-
 
       - name: Restore Explorer NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
@@ -651,7 +691,7 @@ jobs:
             ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-
 
       - name: Restore Blockscout Web NPM Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
